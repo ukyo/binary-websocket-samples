@@ -1,0 +1,13 @@
+doctype 5
+html
+  head
+    title websocket paint
+    link(rel='stylesheet', href='/stylesheets/style.css')
+    block scripts
+  body
+    div#inputs
+      label color:
+      input#line-color(type="color", value="#000000")
+      label width:
+      input#line-width(type="range", min="1", max="255", value="1")
+    canvas

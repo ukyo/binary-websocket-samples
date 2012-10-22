@@ -1,0 +1,27 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+#inputs {
+  position: fixed;
+  z-index: 1;
+  background-color: rgba(0,0,0,.7);
+  height: 32px;
+}
+
+label, input {
+  display: inline-block;
+  vertical-align: middle;
+  font-size: 12px;
+  margin: 0 5px;
+  color: #fdfdfd;
+}
+
+canvas {
+  cursor: pointer;
+  
+}
