@@ -1,23 +1,32 @@
 window.onload = function() {
 
+  /**
+   * @param  {Object} line
+   * @return {ArrayBuffer}
+   */
   function serialize(line) {
     var buff = new ArrayBuffer(12);
     var view = new DataView(buff);
-    //set line color
+    // line color
     view.setUint8(0, line.color[0]);
     view.setUint8(1, line.color[1]);
     view.setUint8(2, line.color[2]);
-    //set start point
+    // start point
     view.setUint16(3, line.start[0], true);
     view.setUint16(5, line.start[1], true);
-    //set end point
+    // end point
     view.setUint16(7, line.end[0], true);
     view.setUint16(9, line.end[1], true);
-    //set line width
+    // line width
     view.setUint8(11, line.width);
     return buff;
   }
 
+  /**
+   * @param  {ArrayBuffer} buff
+   * @param  {number} offset
+   * @return {Object}
+   */
   function deserialize(buff, offset) {
     var view = new DataView(buff, offset);
     return {

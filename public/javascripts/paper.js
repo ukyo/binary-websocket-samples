@@ -1,3 +1,8 @@
+/**
+ * initialize a canvas and inputs.
+ * @param {function} sendMessage send a line data to server.
+ * @return {Object}
+ */
 function Paper(sendMessage) {
   var canvas = document.querySelector('canvas');
   canvas.height = window.innerHeight;
