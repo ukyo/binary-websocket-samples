@@ -12,30 +12,48 @@ JavaScriptでも文字列をバイナリに見立てて処理するという方�
 もちろんwebsocketでもバイナリ形式でのやりとりをサポートしています。
 現状では、バイナリでの通信は全ての環境で使えるというわけではありませんが、そのうち絶対に使うようになるはずです。
 
-ここでは入門編としてwebsocketでお絵かきアプリ線データのシリアライズ・デシリアライズ部分を
+ここではwebsocketでお絵かきアプリ線データのシリアライズ・デシリアライズ部分を
 
 * JSON
 * MessagePack
 * 独自の構造のバイナリ
 
-のそれぞれで実装してみた。以下の章で見ていきたいと思います。
+のそれぞれで実装してみました。以下の章で見ていきたいと思います。
 
-ここで紹介するデモアプリはgithubより落として試すことができます。
-Chromeでしか動作確認していませんが是非、実際に動かしてみてください。
+ここで紹介するデモアプリはgithubより落として試すことができます(Chromeでしか動作確認していません)。
 
 ###インストール
 
 ```
-
+git clone git://github.com/ukyo/binary-websocket-samples.git
+cd binary-websocket-samples
+npm install
 ```
 
 ###アプリの起動
 
-```
+`app-json.js`,`app-msgpack.js`,`app-binary.js` の3種類がありますが、
+実装の仕方が違うだけでブラウザ上での挙動は同じです。
+以下、 `app-json.js` での実行例です。
 
+```
+node app-json.js
 ```
 
 ##お絵かきアプリの概要
+
+以下の画像のようにカラーピッカーと線の太さを変えるスライダーのついたお絵かきアプリを実装しました。
+
+![screenshot](https://raw.github.com/ukyo/binary-websocket-samples/master/image/screenshot.png)
+
+線のデータ構造は以下の表のように定義します。
+
+名前 | データ
+-----|-------
+color| 線の色。rgb値。例:`[255, 255, 255]`
+start| 線の開始位置の座標。例:`[100, 200]`
+end  | 線の終了位置の座標。
+width| 線の幅。
 
 ###クライアント側の共通部分
 
