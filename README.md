@@ -55,15 +55,101 @@ start| 線の開始位置の座標。例:`[100, 200]`
 end  | 線の終了位置の座標。
 width| 線の幅。
 
-###クライアント側の共通部分
+###共通部分
 
-###サーバ側の共通部分
+####クライアント側
+
+途中の部分を省略しますが、
+大まかな流れとしては `Paper` の引数 `sendMessage` にwebsocketでメッセージを送る部分を実装したものを渡して、
+マウスで線を描いたときに、 `sendMessage` を呼ぶようなかんじです。
+関数の外から線の描写ができるように `drawLine` を返します。
+
+```javascript
+function Paper(sendMessage) {
+  var canvas = document.querySelector('canvas');
+  canvas.height = window.innerHeight;
+  canvas.width = window.innerWidth;
+  var ctx = canvas.getContext('2d');
+
+  var startX, startY, endX, endY, lineColor = [0, 0, 0], lineWidth = 1;
+
+  //...
+
+  canvas.onmousemove = function(e) {
+    if(!canvas.dataset.isMouseDown) return;
+    
+    endX = e.offsetX;
+    endY = e.offsetY;
+
+    var line = {
+      color: lineColor,
+      start: [startX, startY],
+      end: [endX, endY],
+      width: lineWidth
+    };
+
+    drawLine(line);
+    sendMessage(line);
+
+    startX = endX;
+    startY = endY;
+  };
+
+  function drawLine(line) {
+    //...
+  }
+
+  return {
+    drawLine: drawLine
+  };
+}
+```
+
+####サーバ側
+
+どのテンプレートを使うかを決めて `WebSocketServer` のインスタンスを返すだけです。
+特に問題はなさそうです。
+
+```javascript
+var express = require('express')
+  , http = require('http')
+  , path = require('path')
+  , WebSocketServer = require('websocket').server;
+
+var app = express();
+
+//...
+
+var httpServer = http.createServer(app).listen(app.get('port'), function(){
+  console.log("Express server listening on port " + app.get('port'));
+});
+
+var wsServer = new WebSocketServer({
+  httpServer: httpServer
+});
+
+module.exports = function(type) {
+  app.get('/', function(req, res) {
+    res.render('index-' + type);
+  });
+  return wsServer;
+};
+```
 
 ###JSON
 
+####クライアント側
+####サーバ側
+
 ###MessagePack
 
+####クライアント側
+####サーバ側
+
 ###独自の構造のバイナリ
+
+####クライアント側
+####サーバ側
 
 ##まとめ
 
