@@ -6,11 +6,10 @@
 
 より通信量やCPUコストを抑える一つの方法として、バイナリでデータをやりとりする方法があります。
 これはネイティブなアプリやサーバサイドでは昔から行われていたことです。
-JavaScriptでも文字列をバイナリに見立てて処理するという方法もありましたが、現実的ではありませんでした。
+JavaScriptでも文字列をバイナリに見立てて処理するという方法もありましたが、あまり現実的ではありませんでした。
 しかし、最近ではHTML5関連のAPIでTypedArrayというものが登場して、
-バイナリ操作も以前より格段に楽に行えるようになっています。
+バイナリ操が以前より格段に楽に行えるようになっています。
 もちろんwebsocketでもバイナリ形式でのやりとりをサポートしています。
-現状では、バイナリでの通信は全ての環境で使えるというわけではありませんが、そのうち絶対に使うようになるはずです。
 
 ここではwebsocketでお絵かきアプリ線データのシリアライズ・デシリアライズ部分を
 
@@ -43,6 +42,11 @@ node app-json.js
 ##お絵かきアプリの概要
 
 以下の画像のようにカラーピッカーと線の太さを変えるスライダーのついたお絵かきアプリを実装しました。
+線の描写やUI部分などは共通なもので、シリアライズ・デシリアライズ部分(と一応websocketで通信する部分)
+だけを別に実装しています。
+
+websocketサーバの実装としては [Worlize/WebSocket-Node](https://github.com/Worlize/WebSocket-Node)
+を使用しています。
 
 ![screenshot](https://raw.github.com/ukyo/binary-websocket-samples/master/image/screenshot.png)
 
@@ -55,6 +59,7 @@ start| 線の開始位置の座標。例:`[100, 200]`
 end  | 線の終了位置の座標。
 width| 線の幅。
 
+以下、共通部分、JSON、MessagePack、独自の構造のバイナリのそれぞれの実装についてクライアント、サーバにわけて見ていきます。
 ###共通部分
 
 ####クライアント側
@@ -211,7 +216,7 @@ wsServer.on('request', function(req) {
 
 ###MessagePack
 
-汎用バイナリのシリアライザの一つである [MessagePack](http://msgpack.org/) を使用した方法です。
+汎用のバイナリのシリアライザの一つである [MessagePack](http://msgpack.org/) を使用した方法です。
 
 MessagePackの実装として、
 クライアント側では [uupaa/msgpack.js](https://github.com/uupaa/msgpack.js), 
@@ -225,12 +230,13 @@ MessagePackの実装として、
 このままでは送れないので `ArrayBuffer` に変換します。
 変換自体は簡単です。 `Uint8Array` コンストラクタに配列を渡すと各要素が元の配列と同じ `Uint8Array`
 のインスタンスが生成されます。
-このインスタンスの `buffer` プロパティが実際のデータ(`ArrayBuffer` オブジェクト)になるます。
+このインスタンスの `buffer` プロパティが実際のデータ(`ArrayBuffer` オブジェクト)になります。
 
 デシリアライズはどうやら配列ライクにアクセスできるものならなんでもオブジェクトに変換してくれるようです
 (もちろんMessagePackとして正しい必要はあります)。
-`ArrayBuffer` から `Uint8Array` オブジェクトを生成して、 `msgpack.unpack` に渡すだけです。
+具体的には受け取った `ArrayBuffer` から `Uint8Array` オブジェクトを生成して、 `msgpack.unpack` に渡すだけです。
 
+あと、 `socket.binaryType = 'arraybuffer'` の部分は `ArrayBuffer` でやりとりする場合は必要になります。
 
 ```javascript
 window.onload = function() {
@@ -297,6 +303,18 @@ wsServer.on('request', function(req) {
 線のデータをよく見ると、rgb値はそれぞれ1byte、各x, y座標2byte、始点、終点の計8byte、
 線の太さは1byteもあれば足りそうです。
 たったの12byteです。
+ここでは以下のような、c言語の構造体のように順番にデータが並んだような構造のバイナリデータを定義して、それを使用します。
+
+![line](https://raw.github.com/ukyo/binary-websocket-samples/master/image/line.png)
+
+* r: 赤 1byte
+* g: 緑 1byte
+* b: 青 1byte
+* sx: 始点のx座標 2byte
+* sy: 始点のy座標 2byte
+* ex: 終点のx座標 2byte
+* ey: 終点のy座標 2byte
+* w: 線の太さ 1byte
 
 ####クライアント側
 
@@ -313,7 +331,7 @@ wsServer.on('request', function(req) {
 
 逆にデシリアライズするときは、
 `view.getHote` で値を取得できます。
-データのバイト数が固定長なので配列は単純にバイナリを連結するだけで表現できます。
+今回、データのバイト数が固定長なので配列は単純にバイナリを連結するだけで表現できます。
 データの取得は `offset` 分だけずらしながら操作するだけです。
 
 ```javascript
@@ -384,7 +402,7 @@ window.onload = function() {
 
 ####サーバ側
 
-この実装ではデータベースに保存するわけでもないので、
+ここではデータベースに保存するわけでもないので、
 バイナリのまま `lines` にデータをためておきます。
 初回通信時には `lines` 内のバイナリを単純に連結して送るだけ、
 通常時は受け取ったバイナリをそのまま他のクライアントに送るだけです。
@@ -425,8 +443,15 @@ wsServer.on('request', function(req) {
 手動でバイナリにシリアライズするのはちょっと面倒そうですが、
 MessagePackを使う方法なら今までのJSONを使った方法と対して変わりませんよね。
 バイナリだからってむちゃくちゃ面倒臭いわけじゃないというがわかったかと思います。
+
 まぁ、そんなこと言ってもwebsocket自体が現状どれだけ使えるのという話ですが、
-例えば今流行っているソーシャルゲームなどでどこがボトルネックになっているかというと、
-こういう部分ですよね。現実的に使えるようになったとき、この記事が役に立ってくれたら幸いです。
+例えばソーシャルゲームでどこがボトルネックになっているかというと、
+多分こういう部分ですよね。
+そういえばFlashだとwebsocket使えるんでしたっけ。
+実はPCブラウザ界では、Flash + node.jsという現実的な解があったんですね。
 
 ##参考
+
+* [WebSocketのバイナリメッセージを試したら、ウェブの未来が垣間見えた](http://blog.agektmr.com/2012/03/websocket.html)
+* [WebSocketでバイナリデータを送受信してみる](http://d.hatena.ne.jp/hagino_3000/20111209/1323372153)
+* [TYPED ARRAYS: BINARY DATA IN THE BROWSER](http://www.html5rocks.com/ja/tutorials/webgl/typed_arrays/)
