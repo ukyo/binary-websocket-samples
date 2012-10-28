@@ -9,6 +9,7 @@ window.onload = function() {
   
   socket.binaryType = 'arraybuffer';
   socket.onmessage = function(message) {
+    console.log(message.data.byteLength);
     var lines = msgpack.unpack(new Uint8Array(message.data));
 
     if(!Array.isArray(lines)) {
