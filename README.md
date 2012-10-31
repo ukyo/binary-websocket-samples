@@ -17,9 +17,14 @@ JavaScriptでも文字列をバイナリに見立てて処理するという方�
 
 * JSON
 * MessagePack
-* 独自の構造のバイナリ
+* c言語の構造体ライクな方法
 
-のそれぞれで実装してみました。以下の章で見ていきたいと思います。
+のそれぞれで実装してみました。
+JSONについては必要ないかと考えましたが、とりあえず比較用ということで。
+本題は下の2つ。
+詳しいことは以下の章で見ていきたいと思います。
+
+----
 
 ここで紹介するデモアプリはgithubより落として試すことができます(Chromeでしか動作確認していません)。
 
@@ -43,85 +48,41 @@ node app-json.js
 
 ##お絵かきアプリの概要
 
-以下の画像のようにカラーピッカーと線の太さを変えるスライダーのついたお絵かきアプリを実装しました。
-線の描写やUI部分などは共通なもので、シリアライズ・デシリアライズ部分(と一応websocketで通信する部分)
-だけを別に実装しています。
-
-websocketサーバの実装としては [Worlize/WebSocket-Node](https://github.com/Worlize/WebSocket-Node)
-を使用しています。
-
 ![screenshot](https://raw.github.com/ukyo/binary-websocket-samples/master/image/screenshot.png)
 
-線のデータ構造は以下の表のように定義します。
+今回実装したお絵かきアプリは上の画像のようにカラーピッカーと線の太さを変えるスライダーのついただけの簡単なものです。
+線の描写やUI部分などは共通なものとして[public/javascripts/paper.js](https://github.com/ukyo/binary-websocket-samples/blob/master/public/javascripts/paper.js)
+にまとめて、シリアライズ・デシリアライズ部分(と一応websocketで通信する部分)
+だけを別に実装しています。
 
-名前 | データ
------|-------
-color| 線の色。rgb値。例:`[255, 255, 255]`
-start| 線の開始位置の座標。例:`[100, 200]`
-end  | 線の終了位置の座標。
-width| 線の幅。
-
-以下、共通部分、JSON、MessagePack、独自の構造のバイナリのそれぞれの実装についてクライアント、サーバにわけて見ていきます。
-
-##共通部分
-
-###クライアント側
-
-[public/javascripts/paper.js](https://github.com/ukyo/binary-websocket-samples/blob/master/public/javascripts/paper.js)
-
-途中の部分を省略しますが、
-`Paper` はキャンバスやカラーピッカーなどを初期化する関数です。
-実行すると外部から線の描写を行う `drawLine` メソッドを持つオブジェクトを返します。
-`Paper` の引数 `sendMessage` にはwebsocketでメッセージを送る部分を実装したものを渡します。
-この `sendMessage` はマウスで線を描いたときに呼び出されます。
+paper.jsには`Paper`という関数が定義されています。
+これはキャンバスやカラーピッカーなどを初期化する関数です。
+実行すると外部から線の描写を行う`drawLine`メソッドを持つオブジェクトを返します。
+`Paper`の引数`sendMessage`にはwebsocketでメッセージを送る部分を実装したものを渡します。
+この`sendMessage`はマウスで線を描いたときに呼び出されます。
 
 ```javascript
 function Paper(sendMessage) {
-  var canvas = document.querySelector('canvas');
-  canvas.height = window.innerHeight;
-  canvas.width = window.innerWidth;
-  var ctx = canvas.getContext('2d');
-
-  var startX, startY, endX, endY, lineColor = [0, 0, 0], lineWidth = 1;
-
   //...
-
   canvas.onmousemove = function(e) {
-    if(!canvas.dataset.isMouseDown) return;
-    
-    endX = e.offsetX;
-    endY = e.offsetY;
-
-    var line = {
-      color: lineColor,
-      start: [startX, startY],
-      end: [endX, endY],
-      width: lineWidth
-    };
-
+    //...
     drawLine(line);
     sendMessage(line);
-
-    startX = endX;
-    startY = endY;
-  };
-
-  function drawLine(line) {
     //...
-  }
-
-  return {
-    drawLine: drawLine
   };
+
+  function drawLine(line) { /*...*/ }
+
+  return { drawLine: drawLine };
 }
 ```
 
-###サーバ側
+次にサーバ側ですが、websocketの実装は[Worlize/WebSocket-Node](https://github.com/Worlize/WebSocket-Node)
+を使用しました([socket.io](https://github.com/learnboost/socket.io)は今回の用途では多機能すぎ)。
+こちらも、初期化の部分だけ共通化しています。
+具体的には、テンプレートを使うかを決めて`WebSocketServer`のインスタンスを返すだけです。
 
 [init-server.js](https://github.com/ukyo/binary-websocket-samples/blob/master/init-server.js)
-
-どのテンプレートを使うかを決めて `WebSocketServer` のインスタンスを返すだけです。
-特に問題はなさそうです。
 
 ```javascript
 var express = require('express')
@@ -150,17 +111,22 @@ module.exports = function(type) {
 };
 ```
 
-##シリアライザ部分
+##シリアライザ
+
+このアプリで使用する線のデータ構造は以下のようになっています。
+この章では、このデータをJSON、MessagePack、c言語の構造体ライクな方法でどのようにシリアライズ・デシリアライズするかを見ていきます。
+
+プロパティ名 | 値
+-----|-------
+color| 線の色。rgb値。例:`[255, 255, 255]`
+start| 線の開始位置の座標。例:`[100, 200]`
+end  | 線の終了位置の座標。
+width| 線の幅。
 
 ###JSON
 
-つまり一般的な方法です。
-
-####クライアント側
-
-[public/javascripts/script-json.js](https://github.com/ukyo/binary-websocket-samples/blob/master/public/javascripts/script-json.js)
-
-特に問題ないですね。送るときに `JSON.stringify` して受け取ったときに `JSON.parse` するだけです。
+クライアント側([public/javascripts/script-json.js](https://github.com/ukyo/binary-websocket-samples/blob/master/public/javascripts/script-json.js))
+は特に問題ないですね。サーバに送るときに `JSON.stringify` して、受け取ったときに `JSON.parse` するだけです。
 
 ```javascript
 window.onload = function() {
@@ -186,14 +152,13 @@ window.onload = function() {
 };
 ```
 
-####サーバ側
+サーバ側([app-json.js](https://github.com/ukyo/binary-websocket-samples/blob/master/app-json.js))
+も特に問題ないですね。
 
-[app-json.js](https://github.com/ukyo/binary-websocket-samples/blob/master/app-json.js)
-
-コネクションを確立したら `conns` に加えて、
-切れたら対象のコネクションを取り除きます。
-`lines` に線のデータを格納して、
-コネクション確立時に `lines` の全データをクライアントに転送します。
+一応全体的な流れを説明すると、コネクションを確立したら`conns`に加えて、
+切れたら対象のコネクションを`conns`から取り除きます。
+クライアントから受け取った線のデータは`lines`に格納(と他のクライアントへ転送)し、
+コネクション確立時に`lines`の全データをクライアントに転送します。
 
 基本的には同じような実装ですが、シリアライズ・デシリアライズ部分だけ違いがあります。
 
@@ -231,29 +196,23 @@ wsServer.on('request', function(req) {
 
 ###MessagePack
 
-汎用のバイナリのシリアライザの一つである [MessagePack](http://msgpack.org/) を使用した方法です。
+汎用のバイナリのシリアライザの一つである[MessagePack](http://msgpack.org/)を使用した方法です。
 
-MessagePackの実装として、
-クライアント側では [uupaa/msgpack.js](https://github.com/uupaa/msgpack.js), 
-サーバ側では [pgriess/node-msgpack](https://github.com/pgriess/node-msgpack)
-を使用しています。
-
-####クライアント側
-
-[public/javascripts/script-msgpack.js](https://github.com/ukyo/binary-websocket-samples/blob/master/public/javascripts/script-msgpack.js)
-
-`msgpack.pack` はJavaScriptのオブジェクトをバイト配列(これはあくまでもJavaScriptの配列)に
+まず、クライアント側([public/javascripts/script-msgpack.js](https://github.com/ukyo/binary-websocket-samples/blob/master/public/javascripts/script-msgpack.js))。
+MessagePackの実装としては[uupaa/msgpack.js](https://github.com/uupaa/msgpack.js)
+を使用しました。
+この実装では`msgpack.pack`,`msgpack.unpack`の2つのメソッドが用意されています。
+`msgpack.pack`はJavaScriptのオブジェクトをバイト配列(これはあくまでもJavaScriptの配列)に
 シリアライズします。
-当然、このままでは送れないので `ArrayBuffer` に変換します。
-変換自体は簡単です。 `Uint8Array` コンストラクタに配列を渡すと各要素が元の配列と同じ `Uint8Array`
-のインスタンスが生成されます。
-このインスタンスの `buffer` プロパティが実際のデータ(`ArrayBuffer` オブジェクト)になります。
+ここでは`ArrayBuffer`でデータを送りたいので配列から変換する必要があります。
+手順は以下のとおりです。
+
+1. `Uint8Array`コンストラクタに配列を渡して`Uint8Array`のインスタンスが生成する。
+2. 生成したインスタンスの`buffer`プロパティ(これが生の`ArrayBuffer`)を取得。
 
 デシリアライズはどうやら配列ライクにアクセスできるものならなんでもオブジェクトに変換してくれるようです
 (もちろんMessagePackとして正しい必要はあります)。
-具体的には受け取った `ArrayBuffer` から `Uint8Array` のインスタンスを生成して、 `msgpack.unpack` に渡すだけです。
-
-あと、 `socket.binaryType = 'arraybuffer'` の部分は `ArrayBuffer` でやりとりする場合は必要になります。
+サーバから受け取った`ArrayBuffer`から`Uint8Array`のインスタンスを生成して、`msgpack.unpack`に渡すだけです。
 
 ```javascript
 window.onload = function() {
@@ -265,6 +224,7 @@ window.onload = function() {
   var paper = Paper(sendMessage);
   var socket = new WebSocket('ws://' + location.host);
   
+  //ArrayBufferで送受信する場合に必要な設定
   socket.binaryType = 'arraybuffer';
   socket.onmessage = function(message) {
     var lines = msgpack.unpack(new Uint8Array(message.data));
@@ -280,9 +240,9 @@ window.onload = function() {
 };
 ```
 
-####サーバ側
-
-[app-msgpack.js](https://github.com/ukyo/binary-websocket-samples/blob/master/app-msgpack.js)
+サーバ側([app-msgpack.js](https://github.com/ukyo/binary-websocket-samples/blob/master/app-msgpack.js))
+では[pgriess/node-msgpack](https://github.com/pgriess/node-msgpack)
+を使用しています。メソッド名などはクライアント側と同じです。
 
 ここではクライアントから受け取ったデータを一旦JavaScriptのオブジェクトに変換しています。
 バイナリのまま保存することも考えたのですが(つまり、いっぺんに送るときはバイナリ的にくっつけるだけ)、
@@ -319,7 +279,7 @@ wsServer.on('request', function(req) {
 });
 ```
 
-###独自の構造のバイナリ
+###c言語の構造体ライクな方法
 
 線のデータをよく見ると、rgb値はそれぞれ1byte、各x, y座標2byte、始点、終点の計8byte、
 線の太さは1byteもあれば足りそうです。
@@ -515,6 +475,14 @@ function deserialize(buff, offset) {
 よくよく見るとなんか涙ぐましいですね(画像一枚でその努力も吹き飛びそう)。
 とは言っても、処理速度的にはバイナリを使ったほうがやっぱり速いですし、
 そもそも画像もwebsocketで送ればいいんです。
+
+あと、MessagePackに関して、
+昔どこかの記事でJavaScriptだと遅いし、どうせgzipするから意味ないよって話もあったんですが、
+今はそうでもないと思います、多分。
+これなぜかって言うと、昔だとAjax(websocketでも)では文字列でしかデータを取ってこれなかったという自乗があって、
+つまりは文字列から一旦バイト配列に変換するという処理がかなりのオーバーヘッドになっていたんだと予想できます。
+今なら、そもそも無茶な変換をする必要もないし、
+TypedArray自体が通常のJavaScriptの配列よりも高速にアクセスできるので処理速度的にも問題ないよね、ということです。
 
 ##まとめ
 
